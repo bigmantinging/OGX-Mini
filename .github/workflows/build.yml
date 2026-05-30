@@ -49,7 +49,6 @@ jobs:
                 ../Firmware/RP2040
           cmake --build .
 
-          # Move the generated .uf2 file to output/ without knowing the exact version
           FILE=$(find . -maxdepth 1 -name "OGX-Mini-*-${{ matrix.board }}.uf2" | head -n 1)
           cp "$FILE" ../output/
 
@@ -59,8 +58,50 @@ jobs:
           name: uf2-${{ matrix.board }}
           path: output/*.uf2
 
+  # ── ACCEL MOD BUILD ─────────────────────────────────────────────────────────
+  # Builds RP2040_ZERO with ADXL345 accelerometer injection enabled.
+  # The .uf2 is uploaded as a separate artifact so it's easy to find.
+  build-accel:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Dependencies
+        run: sudo apt install -y cmake gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib
+
+      - name: Get Pico SDK
+        run: git clone --branch 2.1.0 --recurse-submodules https://github.com/raspberrypi/pico-sdk.git
+
+      - name: Create Build and Output Folders
+        run: mkdir -p build-accel output-accel
+
+      - name: Build OGX-Mini - RP2040_ZERO + ADXL345 accelerometer
+        run: |
+          cd build-accel
+          cmake -DPICO_SDK_PATH=${{ github.workspace }}/pico-sdk \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DOGXM_BOARD=RP2040_ZERO \
+                -DMAX_GAMEPADS=1 \
+                -DACCEL_MOD=ON \
+                ../Firmware/RP2040
+          cmake --build .
+
+          FILE=$(find . -maxdepth 1 -name "OGX-Mini-*-RP2040_ZERO.uf2" | head -n 1)
+          # Rename so it's clearly the accel version
+          cp "$FILE" ../output-accel/OGX-Mini-RP2040_ZERO-ACCEL.uf2
+
+      - name: Upload Accel UF2 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: uf2-RP2040_ZERO-ACCEL
+          path: output-accel/OGX-Mini-RP2040_ZERO-ACCEL.uf2
+  # ────────────────────────────────────────────────────────────────────────────
+
   release:
-    needs: build
+    needs: [build, build-accel]
     runs-on: ubuntu-latest
 
     steps:
@@ -74,7 +115,6 @@ jobs:
 
       - name: Create Draft Release
         uses: softprops/action-gh-release@v2.2.2
-        #if: github.ref == 'refs/heads/main'
         with:
           tag_name: latest
           draft: true
