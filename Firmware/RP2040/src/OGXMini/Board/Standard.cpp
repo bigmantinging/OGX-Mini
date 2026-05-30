@@ -15,6 +15,13 @@
 #include "Board/board_api.h"
 #include "Board/ogxm_log.h"
 
+// ── ACCEL MOD ────────────────────────────────────────────────────────────────
+#ifdef ACCEL_MOD
+#include "AccelMod.h"
+static AccelMod s_accel_mod;
+#endif
+// ─────────────────────────────────────────────────────────────────────────────
+
 constexpr uint32_t FEEDBACK_DELAY_MS = 200;
 
 Gamepad _gamepads[MAX_GAMEPADS];
@@ -82,6 +89,14 @@ void standard::host_mounted(bool host_mounted) {
 void standard::initialize() {
     board_api::init_board();
 
+    // ── ACCEL MOD ─────────────────────────────────────────────────────────
+    // adxl345_init() is called inside board_api::init_board() above.
+    // Here we initialise the AccelMod filter state (zero-cost call).
+#ifdef ACCEL_MOD
+    s_accel_mod.init();
+#endif
+    // ──────────────────────────────────────────────────────────────────────
+
     UserSettings& user_settings = UserSettings::get_instance();
     user_settings.initialize_flash();
 
@@ -118,17 +133,18 @@ void standard::run() {
         TaskQueue::Core0::process_tasks();
 
         for (uint8_t i = 0; i < MAX_GAMEPADS; ++i) {
+            // ── ACCEL MOD ─────────────────────────────────────────────────
+            // Inject accelerometer tilt into right stick BEFORE the driver
+            // reads the pad state and sends it to the PC.
+#ifdef ACCEL_MOD
+            s_accel_mod.apply(_gamepads[i]);
+#endif
+            // ──────────────────────────────────────────────────────────────
             device_driver->process(i, _gamepads[i]);
         }
         tud_task();
         sleep_ms(1);
     }
 }
-
-// #else // OGXM_BOARD == PI_PICO || OGXM_BOARD == RP2040_ZERO || OGXM_BOARD == ADAFRUIT_FEATHER
-
-// void standard::host_mounted(bool host_mounted) {}
-// void standard::initialize() {}
-// void standard::run() {}
 
 #endif // OGXM_BOARD == PI_PICO || OGXM_BOARD == RP2040_ZERO || OGXM_BOARD == ADAFRUIT_FEATHER
