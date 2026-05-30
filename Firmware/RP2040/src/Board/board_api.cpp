@@ -11,6 +11,12 @@
 #include "Board/board_api_private/board_api_private.h"
 #include "TaskQueue/TaskQueue.h"
 
+// ── ACCEL MOD ────────────────────────────────────────────────────────────────
+#ifdef ACCEL_MOD
+#include "adxl345.h"
+#endif
+// ─────────────────────────────────────────────────────────────────────────────
+
 namespace board_api {
 
 mutex_t gpio_mutex_;
@@ -101,6 +107,17 @@ void init_board() {
 
         mutex_exit(&gpio_mutex_);
     }
+
+    // ── ACCEL MOD ─────────────────────────────────────────────────────────
+#ifdef ACCEL_MOD
+    if (!adxl345_init()) {
+        OGXM_LOG("ADXL345 not found (addr 0x%02X). Check wiring.\n", ADXL345_ADDR);
+    } else {
+        OGXM_LOG("ADXL345 OK\n");
+    }
+#endif
+    // ──────────────────────────────────────────────────────────────────────
+
     OGXM_LOG("Board initialized\n");
 }
 
