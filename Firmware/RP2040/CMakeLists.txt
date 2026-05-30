@@ -85,6 +85,8 @@ set(LIBS_BOARD
     # UART
     hardware_uart
     hardware_irq
+    # I2C — needed for ADXL345 (added for ACCEL_MOD, harmless when unused)
+    hardware_i2c
     #fix16
     libfixmath
 )
@@ -135,10 +137,6 @@ elseif(OGXM_BOARD STREQUAL "RP2040_ZERO")
     add_compile_definitions(CONFIG_OGXM_BOARD_RP2040_ZERO=1)
     set(EN_USB_HOST TRUE)
     set(EN_RGB TRUE)
-
-# elseif(OGXM_BOARD STREQUAL "INTERNAL_4CH")
-#     set(EN_USB_HOST TRUE)
-#     set(EN_4CH TRUE)
 
 elseif(OGXM_BOARD STREQUAL "EXTERNAL_4CH_I2C")
     add_compile_definitions(CONFIG_OGXM_BOARD_EXTERNAL_4CH=1)
@@ -246,12 +244,7 @@ endif()
 if(EN_4CH)
     add_compile_definitions(CONFIG_EN_4CH=1)
     message(STATUS "4CH enabled.")
-    # list(APPEND SOURCES_BOARD
-    #     ${SRC}/I2CDriver/4Channel/I2CMaster.cpp
-    #     ${SRC}/I2CDriver/4Channel/I2CSlave.cpp
-    # )
     list(APPEND LIBS_BOARD
-        hardware_i2c
         pico_i2c_slave
     )
 endif()
@@ -266,9 +259,6 @@ if(EN_ESP32)
             pico_i2c_slave
         )
     endif()
-    list(APPEND LIBS_BOARD
-        hardware_i2c
-    )
 endif()
 
 if(EN_UART_BRIDGE)
@@ -306,6 +296,17 @@ pico_sdk_init()
 
 add_executable(${FW_NAME} ${SOURCES_BOARD})
 
+# ── ACCEL MOD ─────────────────────────────────────────────────────────────────
+# Must be placed AFTER add_executable() so ${FW_NAME} target exists.
+# Build with:  cmake .. -DACCEL_MOD=ON  to enable accelerometer.
+# Without this flag the build is 100% stock — no code change at all.
+option(ACCEL_MOD "Enable ADXL345 accelerometer right-stick injection" OFF)
+if(ACCEL_MOD)
+    target_compile_definitions(${FW_NAME} PRIVATE ACCEL_MOD=1)
+    message(STATUS "AccelMod: ADXL345 enabled — GPIO 4 (SDA), GPIO 5 (SCL), addr 0x53")
+endif()
+# ──────────────────────────────────────────────────────────────────────────────
+
 set(BUILD_STR "")
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -336,30 +337,28 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_compile_definitions(OGXM_DEBUG=1)
 
     target_compile_options(${FW_NAME} PRIVATE
-        -Wall                # Enable most warnings
-        -Wextra              # Enable extra warnings
-        -Wconversion         # Warn on type conversion issues
-        -Wsign-conversion    # Warn on sign conversion issues
-        -Wno-unused-parameter # Disable warnings for unused parameters
-        # -Werror              # Treat warnings as errors
+        -Wall
+        -Wextra
+        -Wconversion
+        -Wsign-conversion
+        -Wno-unused-parameter
     )
 
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
     pico_enable_stdio_uart(${FW_NAME} 0)
     add_compile_definitions(CFG_TUSB_DEBUG=0)
     add_compile_options(
-        -O3                     # Optimize for speed
-        # -mcpu=cortex-m0plus     # Target ARM Cortex-M0+
-        -mthumb                 # Use Thumb instruction set
-        -ffunction-sections     # Place each function in its own section
-        -fdata-sections         # Place each data item in its own section
-        -fomit-frame-pointer    # Omit frame pointers
-        -finline-functions      # Enable inlining
+        -O3
+        -mthumb
+        -ffunction-sections
+        -fdata-sections
+        -fomit-frame-pointer
+        -finline-functions
     )
 
     add_link_options(
-        -Wl,--gc-sections       # Remove unused sections
-        -flto                   # Link-Time Optimization
+        -Wl,--gc-sections
+        -flto
     )
 endif()
 
@@ -394,8 +393,6 @@ target_compile_definitions(libfixmath PRIVATE
     FIXMATH_NO_CACHE
     FIXMATH_NO_HARD_DIVISION
     FIXMATH_NO_OVERFLOW
-    # FIXMATH_NO_ROUNDING
-    # FIXMATH_OPTIMIZE_8BIT
 )
 
 if(OGXM_RETAIL STREQUAL "TRUE")
